@@ -464,13 +464,16 @@ void loadScores() {
 
 void saveScore(int newScore) {
   // Insertar el nuevo puntaje en el array y ordenar
+  bool inserted = false;  // Variable para indicar si el puntaje ha sido insertado
   for (int i = 0; i < MAX_SCORES; i++) {
-    if (newScore > scores[i]) {
-      for (int j =  MAX_SCORES-1; j > i; j--) {
+    if (newScore > scores[i] && !inserted) {  // Si el nuevo puntaje es mayor y aún no ha sido insertado
+      // Desplazar puntajes hacia abajo
+      for (int j = MAX_SCORES - 1; j > i; j--) {
         scores[j] = scores[j - 1];
       }
-      scores[i] = newScore;
-      break;
+      scores[i] = newScore;  // Insertar el nuevo puntaje en la posición correcta
+      inserted = true;  // Marcar que el puntaje ha sido insertado
+      break;  // Salir del bucle una vez que el nuevo puntaje ha sido insertado
     }
   }
   saveScoresToSD();
