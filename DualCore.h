@@ -25,7 +25,7 @@ void DualCoreESP32::ConfigCores(TaskFunction_t loop1, TaskFunction_t loop2) {
   xTaskCreatePinnedToCore(
     loop1,                /* Función que controla la tarea. */
     "Ciclo1",             /* Etiqueta de la tarea.          */
-    1000,                 /* Tamaño en memoria RAM.         */
+    10000,                /* Tamaño en memoria RAM.         */
     NULL,                 /* Parámetros de la tarea.        */
     1,                    /* Prioridad de la tarea.         */
     &Hilo1,               /* Seguimiento de la tarea.       */
@@ -35,7 +35,7 @@ void DualCoreESP32::ConfigCores(TaskFunction_t loop1, TaskFunction_t loop2) {
   xTaskCreatePinnedToCore(
     loop2,                /* Función que controla la tarea. */
     "Ciclo2",             /* Etiqueta de la tarea.          */
-    1000,                 /* Tamaño en memoria RAM.         */
+    10000,                /* Tamaño en memoria RAM.         */
     NULL,                 /* Parámetros de la tarea.        */
     1,                    /* Prioridad de la tarea.         */
     &Hilo2,               /* Seguimiento de la tarea.       */
