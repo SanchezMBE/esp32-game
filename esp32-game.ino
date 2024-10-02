@@ -8,6 +8,7 @@
 #include "Audio.h"
 #include "C:\Users\bruno\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.4\libraries\SD\src\SD.h"
 #include "FS.h"
+#include <ArduinoJson.h>
 
 // Joystick Connections
 #define HORZ_PIN 34
@@ -37,9 +38,8 @@
 DualCoreESP32 DCESP32;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Audio audio;
-File file;
-const char* filename = "/scores.json";
-DynamicJsonDocument doc(1024);
+const char* SCORES_FILE = "/scores.json";
+const int MAX_SCORES = 4;
 
 // Banderas
 bool isIntro = true;
@@ -123,6 +123,8 @@ void Loop1(void *pvParameters) {
       handleGameOver(selectedOption);
     } else if (isPaused) {
       handlePauseMenu(selectedOption, isPaused);
+    } else if (isMenu) {
+      handleMenu(selectedOption);
     } else if (isGameRunning) {
       // Verificar si se presiona el botón de pausa
       if (digitalRead(SEL_PIN) == LOW) {
@@ -136,8 +138,7 @@ void Loop1(void *pvParameters) {
       // Lógica del juego existente
       updatePlayer();
       updateObstacles();
-      checkCollisions();
-      updateScore();
+      saveScore(score);
     }
   }
 }
@@ -202,10 +203,10 @@ void showGameOverOptions(int selectedOption) {
   lcd.setCursor(3, 0);
   lcd.print("GAME OVER");
   lcd.setCursor(0, 1);
-  lcd.print(selectedOption == 0 ? "> " : "  ");
+  lcd.print(selectedOption == 0 ? ">" : " ");
   lcd.print("Reiniciar");
-  lcd.setCursor(9, 1);
-  lcd.print(selectedOption == 1 ? "> " : "  ");
+  lcd.setCursor(11, 1);
+  lcd.print(selectedOption == 1 ? ">" : " ");
   lcd.print("Menu");
 }
 
@@ -214,10 +215,10 @@ void showPauseMenu(int selectedOption) {
   lcd.setCursor(5, 0);
   lcd.print("PAUSA");
   lcd.setCursor(0, 1);
-  lcd.print(selectedOption == 0 ? "> " : "  ");
+  lcd.print(selectedOption == 0 ? ">" : " ");
   lcd.print("Reanudar");
   lcd.setCursor(10, 1);
-  lcd.print(selectedOption == 1 ? "> " : "  ");
+  lcd.print(selectedOption == 1 ? ">" : " ");
   lcd.print("Menu");
 }
 
@@ -227,7 +228,7 @@ void goToMenu() {
   isPaused = false;
   isMenu = true;
   selectedOption = 0;
-  handleMenu(selectedOption);
+  showMenu(selectedOption);
 }
 
 void showMenu(int selectedOption) {
@@ -235,10 +236,10 @@ void showMenu(int selectedOption) {
   lcd.setCursor(5, 0);
   lcd.print("MENU");
   lcd.setCursor(0, 1);
-  lcd.print(selectedOption == 0 ? "> " : "  ");
+  lcd.print(selectedOption == 0 ? ">" : " ");
   lcd.print("Iniciar");
-  lcd.setCursor(10, 1);
-  lcd.print(selectedOption == 1 ? "> " : "  ");
+  lcd.setCursor(9, 1);
+  lcd.print(selectedOption == 1 ? ">" : " ");
   lcd.print("Scores");
 }
 
@@ -278,16 +279,7 @@ void showScores() {
     delay(2000);              // Pausa de 2 segundos para cada puntaje
   }
   lcd.clear();
-  handleMenu(selectedOption);  // Regresar al menú después de mostrar los puntajes
-}
-
-void saveScore(int newScore) {
-  // Insertar el nuevo puntaje en el array ordenado
-  int i;
-  for (i = 3; i >= 0 && scores[i] < newScore; i--) {
-    if (i < 3) scores[i + 1] = scores[i];
-  }
-  if (i < 3) scores[i + 1] = newScore;
+  showMenu(selectedOption);  // Regresar al menú después de mostrar los puntajes
 }
 
 void resetGame() {
@@ -370,6 +362,7 @@ void updatePlayer() {
       lcd.setCursor(xPlayerPos, yPlayerPos);
       lcd.write(PLAYER_LEFT);
     }
+    checkCollisions();
   }
 }
 
@@ -425,6 +418,8 @@ void updateObstacles() {
 
     // Si el obstáculo pasó sobre la moneda, redibujar la moneda
     drawCoin();
+
+    checkCollisions();
   }
 }
 
@@ -437,11 +432,61 @@ void checkCollisions() {
   checkCoinCollision();
 }
 
-void updateScore() {
-  scoreDigits = (score > 9999) ? 5 : (score > 999) ? 4 : (score > 99) ? 3 : (score > 9) ? 2 : 1;
-  lcd.setCursor(16 - scoreDigits, 0);
-  lcd.print(score);
-  saveScore(score);
+void initializeScores() {
+  if (!SD.exists(SCORES_FILE)) {
+    DynamicJsonDocument doc(256);
+    JsonArray scoresArray = doc.createNestedArray("scores");
+    for (int i = 0; i < MAX_SCORES; i++) {
+      scoresArray.add(0);
+    }
+    File file = SD.open(SCORES_FILE, FILE_WRITE);
+    if (file) {
+      serializeJson(doc, file);
+      file.close();
+    }
+  }
+}
+
+void loadScores() {
+  File file = SD.open(SCORES_FILE);
+  if (file) {
+    DynamicJsonDocument doc(256);
+    DeserializationError error = deserializeJson(doc, file);
+    if (!error) {
+      JsonArray scoresArray = doc["scores"];
+      for (int i = 0; i < MAX_SCORES; i++) {
+        scores[i] = scoresArray[i];
+      }
+    }
+    file.close();
+  }
+}
+
+void saveScore(int newScore) {
+  // Insertar el nuevo puntaje en el array y ordenar
+  for (int i = 0; i < MAX_SCORES; i++) {
+    if (newScore > scores[i]) {
+      for (int j =  MAX_SCORES-1; j > i; j--) {
+        scores[j] = scores[j - 1];
+      }
+      scores[i] = newScore;
+      break;
+    }
+  }
+  saveScoresToSD();
+}
+
+void saveScoresToSD() {
+  DynamicJsonDocument doc(256);
+  JsonArray scoresArray = doc.createNestedArray("scores");
+  for (int i = 0; i < MAX_SCORES; i++) {
+    scoresArray.add(scores[i]);
+  }
+  File file = SD.open(SCORES_FILE, FILE_WRITE);
+  if (file) {
+    serializeJson(doc, file);
+    file.close();
+  }
 }
 
 // Función para generar la moneda en una posición aleatoria
@@ -500,20 +545,6 @@ bool checkCollision() {
 }
 
 // Función para guardar los puntajes en un archivo JSON
-void saveScoresToJSON() {
-  doc["score1"] = scores[0];
-  doc["score2"] = scores[1];
-
-  File file = SD.open(filename, FILE_WRITE);
-  if (!file) {
-    Serial.println("No se pudo abrir el archivo para escribir");
-    return;
-  }
-
-  serializeJson(doc, file);  // Escribe el JSON en el archivo
-  file.close();
-  Serial.println("Puntajes guardados en la SD");
-}
 
 /*~~~~~~~~~~~~~~~~~~~~~~ Audio ~~~~~~~~~~~~~~~~~~~~~~~*/
 void Loop2(void * pvParameters) {
@@ -603,31 +634,14 @@ void setup ( void ) {
   }
   Serial.println("Tarjeta SD iniciada correctamente.");
 
-  // Recuperar los scores del archivo JSON al iniciar el juego
-  if (SD.exists(filename)) {
-    file = SD.open(filename, FILE_READ);
-    if (file) {
-      deserializeJson(doc, file);
-      for (int i = 0; i < 4; i++) {
-        scores[i] = doc["scores"][i]; // Recuperar los scores del JSON
-      }
-      file.close();
-      Serial.println("Scores recuperados del archivo:");
-      for (int i = 0; i < 4; i++) {
-        Serial.println(scores[i]);
-      }
-    } else {
-      Serial.println("No se pudo abrir el archivo.");
-    }
-  } else {
-    Serial.println("El archivo no existe.");
-  }
-  
   // Setup I2S 
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
   
   // Set Volume
-  audio.setVolume(2);
+  audio.setVolume(20);
+
+  initializeScores();
+  loadScores();
   
   /* Pasar los loops como punteros a función */
   DCESP32.ConfigCores(Loop1, Loop2); 
