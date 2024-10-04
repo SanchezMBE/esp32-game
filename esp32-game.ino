@@ -90,15 +90,15 @@ uint8_t caracter4[] = {
 };
 
 uint8_t caracter5[] = {
-  B01110,B11111,B11010,B11101,B01110,B01000,B00110,B00000
+  B01110, B11111, B11010, B11101, B01110, B01000, B00110, B00000
 };
 
 uint8_t caracter6[] = {
-  B01110,B11111,B01011,B10111,B01110,B00010,B01100,B00000
+  B01110, B11111, B01011, B10111, B01110, B00010, B01100, B00000
 };
 
 uint8_t caracter7[] = {
-  B00000,B10101,B01110,B11011,B01110,B10101,B00000,B00000
+  B00000, B00100, B01110, B11011, B01110, B00100, B00000, B00000
 };
 
 // Tiempos para la multitarea
@@ -310,9 +310,7 @@ void redrawGameState() {
   drawCoin();
   
   // Mostrar el puntaje
-  scoreDigits = (score > 9999) ? 5 : (score > 999) ? 4 : (score > 99) ? 3 : (score > 9) ? 2 : 1;
-  lcd.setCursor(16 - scoreDigits, 0);
-  lcd.print(score);
+  drawScore();
 }
 
 void updatePlayer() {
@@ -418,7 +416,7 @@ void updateObstacles() {
 
     // Si el obstáculo pasó sobre la moneda, redibujar la moneda
     drawCoin();
-
+    drawScore();
     checkCollisions();
   }
 }
@@ -445,6 +443,12 @@ void initializeScores() {
       file.close();
     }
   }
+}
+
+void drawScore() {
+  scoreDigits = (score > 9999) ? 5 : (score > 999) ? 4 : (score > 99) ? 3 : (score > 9) ? 2 : 1;
+  lcd.setCursor(16 - scoreDigits, 0);
+  lcd.print(score);
 }
 
 void loadScores() {
@@ -653,6 +657,9 @@ void showIntro() {
   // Mostrar el nombre del juego en la fila inferior
   lcd.setCursor(4, 1);  // Centrar el texto en la fila inferior
   lcd.print("JUMP MAN");
+  
+  lcd.setCursor(8, 0);
+  lcd.write(COIN);
 
   // Mostrar el logotipo desplazandose
   for (int i = 0; i < 18; i++) {
@@ -664,7 +671,7 @@ void showIntro() {
     lcd.print(" ");
     lcd.setCursor(i, 0);
     lcd.write(PLAYER_RUNNING_RIGHT);
-    delay(500);
+    delay(200);
   }
 
   lcd.clear();
@@ -683,7 +690,7 @@ void showIntro() {
       lcd.print(nombres[i + 1]);
     }
     
-    delay(2000);  // Mostrar cada par de nombres durante 3 segundos
+    delay(1500);  // Mostrar cada par de nombres durante 3 segundos
     lcd.clear();
   }
 
