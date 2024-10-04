@@ -111,11 +111,12 @@ const unsigned long playerMoveInterval = 100;  // Intervalo de tiempo para mover
 const unsigned long jumpInterval = 200;  // Intervalo de tiempo para el salto
 unsigned long currentTime;
 
-/*~~~~~~~~~~~~~~~~~~~~~~~ Game ~~~~~~~~~~~~~~~~~~~~~~~*/
+/*~~~~~~~~~~~~~~~~~~~~~~~ Game Loop ~~~~~~~~~~~~~~~~~~~~~~~*/
+
 void Loop1(void *pvParameters) {
   showIntro();
-  isGameRunning = true;
-
+  isMenu = true;
+  
   for (;;) {
     currentTime = millis();
 
@@ -130,18 +131,79 @@ void Loop1(void *pvParameters) {
       if (digitalRead(SEL_PIN) == LOW) {
         isPaused = true;
         selectedOption = 0;
-        showPauseMenu(selectedOption);
-        delay(200); // Debounce
+        showPauseMenuOpctions(selectedOption);
         continue;
       }
 
-      // Lógica del juego existente
+      // Lógica del juego
       updatePlayer();
       updateObstacles();
-      saveScore(score);
     }
   }
 }
+
+/*~~~~~~~~~~~~~~~~~~~~~~~ Menu Principal ~~~~~~~~~~~~~~~~~~~~~~~*/
+
+void handleMenu(int &selectedOption) {
+  static bool optionsShown = false;
+
+  if (!optionsShown) {
+    showMenuOptions(selectedOption);
+    optionsShown = true;
+  }
+  
+  // Manejar la selección de opciones
+  if (analogRead(HORZ_PIN) == 4095) {
+    selectedOption = 1;
+    showMenuOptions(selectedOption);
+  } else if (analogRead(HORZ_PIN) == 0) {
+    selectedOption = 0;
+    showMenuOptions(selectedOption);
+  }
+
+  if (digitalRead(SEL_PIN) == LOW) {
+    if (selectedOption == 0) {
+      // Iniciar juego
+      isMenu = false;
+      isGameRunning = true;
+      resetGame();
+    } else {
+      showScores();
+    }
+  }
+
+  delay(200); // antirebote
+}
+
+void showMenuOptions(int selectedOption) {
+  lcd.clear();
+  lcd.setCursor(5, 0);
+  lcd.print("MENU");
+  lcd.setCursor(0, 1);
+  lcd.print(selectedOption == 0 ? ">" : " ");
+  lcd.print("Iniciar");
+  lcd.setCursor(9, 1);
+  lcd.print(selectedOption == 1 ? ">" : " ");
+  lcd.print("Scores");
+}
+
+void showScores() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Scores:");
+  for (int i = 0; i < 4; i++) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(i + 1);        // Mostrar la posición
+    lcd.print(". Puntaje: ");
+    lcd.print(scores[i]);     // Mostrar el puntaje correspondiente
+    delay(2000);              // Pausa de 2 segundos para cada puntaje
+  }
+  lcd.clear();
+  showMenuOptions(selectedOption);  // Regresar al menú después de mostrar los puntajes
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~ Game Over Menu ~~~~~~~~~~~~~~~~~~~~~~~*/
 
 void handleGameOver(int &selectedOption) {
   static bool optionsShown = false;
@@ -167,35 +229,17 @@ void handleGameOver(int &selectedOption) {
       isGameOver = false;
       isGameRunning = true;
     } else {
-      goToMenu();
+      isGameRunning = false;
+      isGameOver = false;
+      isPaused = false;
+      isMenu = true;
+      selectedOption = 0;
+      showMenuOptions(selectedOption);
     }
     optionsShown = false;
-    delay(200); // Debounce
   }
-}
-
-void handlePauseMenu(int &selectedOption, bool &isPaused) {
-  // Manejar la selección de opciones
-  if (analogRead(HORZ_PIN) == 4095) {
-    selectedOption = 1;
-    showPauseMenu(selectedOption);
-  } else if (analogRead(HORZ_PIN) == 0) {
-    selectedOption = 0;
-    showPauseMenu(selectedOption);
-  }
-
-  if (digitalRead(SEL_PIN) == LOW) {
-    if (selectedOption == 0) {
-      // Reanudar juego
-      isPaused = false;
-      lcd.clear();
-      // Redibujar el estado del juego
-      redrawGameState();
-    } else {
-      goToMenu();
-    }
-    delay(200); // Debounce
-  }
+  
+  delay(200); // antirebote
 }
 
 void showGameOverOptions(int selectedOption) {
@@ -210,7 +254,39 @@ void showGameOverOptions(int selectedOption) {
   lcd.print("Menu");
 }
 
-void showPauseMenu(int selectedOption) {
+/*~~~~~~~~~~~~~~~~~~~~~~~ Pause Menu ~~~~~~~~~~~~~~~~~~~~~~~*/
+
+void handlePauseMenu(int &selectedOption, bool &isPaused) {
+  // Manejar la selección de opciones
+  if (analogRead(HORZ_PIN) == 4095) {
+    selectedOption = 1;
+    showPauseMenuOpctions(selectedOption);
+  } else if (analogRead(HORZ_PIN) == 0) {
+    selectedOption = 0;
+    showPauseMenuOpctions(selectedOption);
+  }
+
+  if (digitalRead(SEL_PIN) == LOW) {
+    if (selectedOption == 0) {
+      // Reanudar juego
+      isPaused = false;
+      lcd.clear();
+      // Redibujar el estado del juego
+      redrawGameState();
+    } else {
+      isGameRunning = false;
+      isGameOver = false;
+      isPaused = false;
+      isMenu = true;
+      selectedOption = 0;
+      showMenuOptions(selectedOption);
+    }
+  }
+
+  delay(200); // antirebote
+}
+
+void showPauseMenuOpctions(int selectedOption) {
   lcd.clear();
   lcd.setCursor(5, 0);
   lcd.print("PAUSA");
@@ -222,96 +298,7 @@ void showPauseMenu(int selectedOption) {
   lcd.print("Menu");
 }
 
-void goToMenu() {
-  isGameRunning = false;
-  isGameOver = false;
-  isPaused = false;
-  isMenu = true;
-  selectedOption = 0;
-  showMenu(selectedOption);
-}
-
-void showMenu(int selectedOption) {
-  lcd.clear();
-  lcd.setCursor(5, 0);
-  lcd.print("MENU");
-  lcd.setCursor(0, 1);
-  lcd.print(selectedOption == 0 ? ">" : " ");
-  lcd.print("Iniciar");
-  lcd.setCursor(9, 1);
-  lcd.print(selectedOption == 1 ? ">" : " ");
-  lcd.print("Scores");
-}
-
-void handleMenu(int &selectedOption) {
-  // Manejar la selección de opciones
-  if (analogRead(HORZ_PIN) == 4095) {
-    selectedOption = 1;
-    showMenu(selectedOption);
-  } else if (analogRead(HORZ_PIN) == 0) {
-    selectedOption = 0;
-    showMenu(selectedOption);
-  }
-
-  if (digitalRead(SEL_PIN) == LOW) {
-    if (selectedOption == 0) {
-      // Iniciar juego
-      isMenu = false;
-      isGameRunning = true;
-      resetGame();
-    } else {
-      showScores();
-    }
-    delay(200); // Debounce
-  }
-}
-
-void showScores() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Scores:");
-  for (int i = 0; i < 4; i++) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(i + 1);        // Mostrar la posición
-    lcd.print(". Puntaje: ");
-    lcd.print(scores[i]);     // Mostrar el puntaje correspondiente
-    delay(2000);              // Pausa de 2 segundos para cada puntaje
-  }
-  lcd.clear();
-  showMenu(selectedOption);  // Regresar al menú después de mostrar los puntajes
-}
-
-void resetGame() {
-  xPlayerPos = 3;
-  yPlayerPos = 1;
-  isJumping = false;
-  xObstacleLowerPos = 15;
-  xObstacleUpperPos = 22;
-  directionLower = LEFT;
-  directionUpper = LEFT;
-  score = 0;
-  spawnCoin();
-  lcd.clear();
-}
-
-void redrawGameState() {
-  // Redibujar el jugador
-  lcd.setCursor(xPlayerPos, yPlayerPos);
-  lcd.write(playerDirection == RIGHT ? PLAYER_RIGHT : PLAYER_LEFT);
-  
-  // Redibujar los obstáculos
-  lcd.setCursor(xObstacleLowerPos, 1);
-  lcd.write(directionLower == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
-  lcd.setCursor(xObstacleUpperPos, 0);
-  lcd.write(directionUpper == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
-  
-  // Redibujar la moneda
-  drawCoin();
-  
-  // Mostrar el puntaje
-  drawScore();
-}
+/*~~~~~~~~~~~~~~~~~~~~~~~ Actualizar personaje ~~~~~~~~~~~~~~~~~~~~~~~*/
 
 void updatePlayer() {
   if (currentTime - previousTimePlayer > playerMoveInterval) {
@@ -363,6 +350,8 @@ void updatePlayer() {
     checkCollisions();
   }
 }
+
+/*~~~~~~~~~~~~~~~~~~~~~~~ Actualizar obstaculo ~~~~~~~~~~~~~~~~~~~~~~~*/
 
 void updateObstacles() {
   if (currentTime - previousTimeObstacle > obstacleInterval) {
@@ -421,6 +410,21 @@ void updateObstacles() {
   }
 }
 
+/*~~~~~~~~~~~~~~~~~~~~~~~ Collisions ~~~~~~~~~~~~~~~~~~~~~~~*/
+
+bool checkCollision() {
+  if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
+      (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
+    lcd.clear();
+    lcd.setCursor(3, 0);
+    lcd.print("GAME OVER");
+    isGameOver = true;
+    isGameRunning = false;
+    return isGameOver;
+  }
+  return false;
+}
+
 void checkCollisions() {
   if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
       (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
@@ -430,69 +434,22 @@ void checkCollisions() {
   checkCoinCollision();
 }
 
-void initializeScores() {
-  if (!SD.exists(SCORES_FILE)) {
-    DynamicJsonDocument doc(256);
-    JsonArray scoresArray = doc.createNestedArray("scores");
-    for (int i = 0; i < MAX_SCORES; i++) {
-      scoresArray.add(0);
-    }
-    File file = SD.open(SCORES_FILE, FILE_WRITE);
-    if (file) {
-      serializeJson(doc, file);
-      file.close();
-    }
-  }
-}
+// Función para verificar si el jugador ha tocado la moneda
+void checkCoinCollision() {
+  if (xPlayerPos == xCoinPos && yPlayerPos == yCoinPos) {
+    score++;
+    saveScore(score);
 
-void drawScore() {
-  scoreDigits = (score > 9999) ? 5 : (score > 999) ? 4 : (score > 99) ? 3 : (score > 9) ? 2 : 1;
-  lcd.setCursor(16 - scoreDigits, 0);
-  lcd.print(score);
-}
+    // Borrar la moneda de la pantalla
+    lcd.setCursor(xCoinPos, yCoinPos);
+    lcd.print(' ');
 
-void loadScores() {
-  File file = SD.open(SCORES_FILE);
-  if (file) {
-    DynamicJsonDocument doc(256);
-    DeserializationError error = deserializeJson(doc, file);
-    if (!error) {
-      JsonArray scoresArray = doc["scores"];
-      for (int i = 0; i < MAX_SCORES; i++) {
-        scores[i] = scoresArray[i];
-      }
-    }
-    file.close();
-  }
-}
+    // Generar una nueva moneda en una posición aleatoria
+    spawnCoin();
 
-void saveScore(int newScore) {
-  // Insertar el nuevo puntaje en el array y ordenar
-  bool inserted = false;  // Variable para indicar si el puntaje ha sido insertado
-  for (int i = 0; i < MAX_SCORES; i++) {
-    if (newScore > scores[i] && !inserted) {  // Si el nuevo puntaje es mayor y aún no ha sido insertado
-      // Desplazar puntajes hacia abajo
-      for (int j = MAX_SCORES - 1; j > i; j--) {
-        scores[j] = scores[j - 1];
-      }
-      scores[i] = newScore;  // Insertar el nuevo puntaje en la posición correcta
-      inserted = true;  // Marcar que el puntaje ha sido insertado
-      break;  // Salir del bucle una vez que el nuevo puntaje ha sido insertado
-    }
-  }
-  saveScoresToSD();
-}
-
-void saveScoresToSD() {
-  DynamicJsonDocument doc(256);
-  JsonArray scoresArray = doc.createNestedArray("scores");
-  for (int i = 0; i < MAX_SCORES; i++) {
-    scoresArray.add(scores[i]);
-  }
-  File file = SD.open(SCORES_FILE, FILE_WRITE);
-  if (file) {
-    serializeJson(doc, file);
-    file.close();
+    // Mostrar el puntaje actualizado en el monitor serial
+    Serial.print("Score: ");
+    Serial.println(score);
   }
 }
 
@@ -513,47 +470,115 @@ void spawnCoin() {
   drawCoin(); // Dibujar la moneda en la pantalla
 }
 
-// Función para dibujar la moneda en la pantalla
+/*~~~~~~~~~~~~~~~~~~~~~~~ Reset game ~~~~~~~~~~~~~~~~~~~~~~~*/
+
+void resetGame() {
+  xPlayerPos = 3;
+  yPlayerPos = 1;
+  isJumping = false;
+  xObstacleLowerPos = 15;
+  xObstacleUpperPos = 22;
+  directionLower = LEFT;
+  directionUpper = LEFT;
+  score = 0;
+  spawnCoin();
+  lcd.clear();
+}
+
+/*~~~~~~~~~~~~~~ Dibujar elementos en pantalla ~~~~~~~~~~~~~~*/
+
+void redrawGameState() {
+  // Redibujar el jugador
+  lcd.setCursor(xPlayerPos, yPlayerPos);
+  lcd.write(playerDirection == RIGHT ? PLAYER_RIGHT : PLAYER_LEFT);
+  
+  // Redibujar los obstáculos
+  lcd.setCursor(xObstacleLowerPos, 1);
+  lcd.write(directionLower == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
+  lcd.setCursor(xObstacleUpperPos, 0);
+  lcd.write(directionUpper == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
+
+  drawCoin();// Redibujar la moneda
+  drawScore(); // Mostrar el puntaje
+}
+
+void drawScore() {
+  scoreDigits = (score > 9999) ? 5 : (score > 999) ? 4 : (score > 99) ? 3 : (score > 9) ? 2 : 1;
+  lcd.setCursor(16 - scoreDigits, 0);
+  lcd.print(score);
+}
+
 void drawCoin() {
   lcd.setCursor(xCoinPos, yCoinPos);
   lcd.write(COIN); // Mostrar la moneda en la pantalla
 }
 
-// Función para verificar si el jugador ha tocado la moneda
-void checkCoinCollision() {
-  if (xPlayerPos == xCoinPos && yPlayerPos == yCoinPos) {
-    // El jugador ha tocado la moneda
-    score++; // Incrementar el puntaje
+/*~~~~~~~~~~~~~~~~~~~~ Manejo de scores ~~~~~~~~~~~~~~~~~~~~~~*/
 
-    // Borrar la moneda de la pantalla
-    lcd.setCursor(xCoinPos, yCoinPos);
-    lcd.print(' ');
+void saveScore(int newScore) {
+  int i = MAX_SCORES - 1;
+  // Busca la posición correcta para el nuevo puntaje
+  for (; i >= 0 && newScore > scores[i]; i--) {
+    if (i < MAX_SCORES - 1) {
+      scores[i+1] = scores[i]; // Desplaza los puntajes hacia abajo
+    }
+  }
+  scores[i+1] = newScore; // Inserta el nuevo puntaje
+  saveScoresToSD(); // Guarda los puntajes actualizados en la SD
+}
 
-    // Generar una nueva moneda en una posición aleatoria
-    spawnCoin();
+void saveScoresToSD() {
+  DynamicJsonDocument doc(1024);
+  // Asigna los puntajes a las claves específicas en el JSON
+  doc["score1"] = scores[0];
+  doc["score2"] = scores[1];
+  doc["score3"] = scores[2];
+  doc["score4"] = scores[3];
 
-    // Mostrar el puntaje actualizado en el monitor serial
-    Serial.print("Score: ");
-    Serial.println(score);
+  File file = SD.open(SCORES_FILE, FILE_WRITE); 
+  if (file) {
+    serializeJson(doc, file); // Escribe el JSON en el archivo
+    file.close();
   }
 }
 
-bool checkCollision() {
-  if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
-      (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
-    lcd.clear();
-    lcd.setCursor(3, 0);
-    lcd.print("GAME OVER");
-    isGameOver = true;
-    isGameRunning = false;
-    return isGameOver;
+void initializeScores() {
+  if (!SD.exists(SCORES_FILE)) {
+    DynamicJsonDocument doc(1024);
+    // Inicializa los puntajes en el JSON con 0
+    doc["score1"] = 0;
+    doc["score2"] = 0;
+    doc["score3"] = 0;
+    doc["score4"] = 0;
+
+    File file = SD.open(SCORES_FILE, FILE_WRITE);
+    if (file) {
+      serializeJson(doc, file); // Guarda el JSON en la SD
+      file.close();
+    }
   }
-  return false;
 }
 
-// Función para guardar los puntajes en un archivo JSON
+void loadScores() {
+  File file = SD.open(SCORES_FILE);
+  if (file) {
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, file);
+    if (!error) {
+      // Se imprime en la consola serial formateado
+      serializeJsonPretty( doc, Serial );
+      // Carga los puntajes desde las claves del JSON
+      scores[0] = doc["score1"];
+      scores[1] = doc["score2"];
+      scores[2] = doc["score3"];
+      scores[3] = doc["score4"];
+    } 
+    file.close();
+  }
+}
 
-/*~~~~~~~~~~~~~~~~~~~~~~ Audio ~~~~~~~~~~~~~~~~~~~~~~~*/
+/*~~~~~~~~~~~~~~~~~~~~~~ Audio Loop ~~~~~~~~~~~~~~~~~~~~~~~*/
+
 void Loop2(void * pvParameters) {
   const TickType_t xDelay = pdMS_TO_TICKS(10);
   bool gameOverSoundPlayed = false;
@@ -561,7 +586,7 @@ void Loop2(void * pvParameters) {
   const unsigned long gameOverDuration = 2000; // Duración aprox del archivo gameover.mp3 en milisegundos
   bool introPlayed = false;
 
-  while (true) {
+  for (;;) {
     if (isGameOver) {
       if (!gameOverSoundPlayed) {
         if (audio.isRunning()) {
@@ -609,6 +634,7 @@ void Loop2(void * pvParameters) {
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~ Función Setup ~~~~~~~~~~~~~~~~~~~~~~*/
+
 void setup ( void ) {
   Serial.begin ( BAUD_RATE );
 
@@ -656,14 +682,14 @@ void setup ( void ) {
   Serial.println(F( "Se han configurado correctamente los dos nucleos "));
 }
 
+/*~~~~~~~~~~~~~~~~~~~~~~ Intro ~~~~~~~~~~~~~~~~~~~~~~~*/
+
 void showIntro() {  
-  // Mostrar el nombre del juego en la fila inferior
-  lcd.setCursor(4, 1);  // Centrar el texto en la fila inferior
-  lcd.print("JUMP MAN");
-  
   lcd.setCursor(8, 0);
   lcd.write(COIN);
-
+  lcd.setCursor(4, 1);
+  lcd.print("JUMP MAN");
+  
   // Mostrar el logotipo desplazandose
   for (int i = 0; i < 18; i++) {
     lcd.setCursor(i-3, 0);
