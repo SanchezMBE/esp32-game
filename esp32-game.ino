@@ -1,32 +1,32 @@
 /*~~~~~~~~~~~~~~~~~~~~~~ Directivas ~~~~~~~~~~~~~~~~~~~~~~*/
-#define BAUD_RATE 115200
+#define BAUD_RATE 115200 // Tasa de baudios para la comunicación serial
 
-#include "DualCore.h"
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
-#include "Arduino.h"
-#include "Audio.h"
+#include "DualCore.h"           // Manejo de doble núcleo en ESP32
+#include <Wire.h>               // Comunicación I2C
+#include <LiquidCrystal_I2C.h>  // Control de la pantalla LCD I2C
+#include "Arduino.h"            
+#include "Audio.h"              // Manejo de audio
 #include "C:\Users\bruno\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.4\libraries\SD\src\SD.h"
 #include "FS.h"
-#include <ArduinoJson.h>
+#include <ArduinoJson.h>         // Manejo de JSON para los puntajes
 
-// Joystick Connections
-#define HORZ_PIN 34
-#define VERT_PIN 35
-#define SEL_PIN  17
+// Conexiones del Joystick
+#define HORZ_PIN     34
+#define VERT_PIN     35
+#define SEL_PIN      17
 
-// microSD Card Reader connections
+// Conexiones del lector de tarjetas microSD
 #define SD_CS          5
 #define SPI_MOSI      23 
 #define SPI_MISO      19
 #define SPI_SCK       18
 
-// I2S Connections
-#define I2S_DOUT      25
-#define I2S_BCLK      27
-#define I2S_LRC       26
+// Conexiones I2S para salida de audio
+#define I2S_DOUT     25  // Salida de datos
+#define I2S_BCLK     27  // Reloj de bits
+#define I2S_LRC      26   // Selección de canal
 
-// Character IDs
+// Identificadores de los personajes y objetos
 #define PLAYER_RIGHT 0
 #define PLAYER_LEFT 1
 #define PLAYER_RUNNING_RIGHT 2
@@ -38,41 +38,40 @@
 DualCoreESP32 DCESP32;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Audio audio;
-const char* SCORES_FILE = "/scores.json";
+const char* SCORES_FILE = "/scores.json"; // Archivo JSON para puntajes
 const int MAX_SCORES = 4;
 
-// Banderas
+// Estados del juego
 bool isIntro = true;
 bool isMenu = false;
 bool isGameRunning = false;
 bool isGameOver = false;
 
-// Game values
+// Variables del juego
 int scores[4] = {0}; // Array para almacenar los puntajes (máximo 4)
 int menuSelectedOption = 0;
 bool isPaused = false;
-int selectedOption = 0; // 0 para la opción izquierda, 1 para la derecha
+int selectedOption = 0; // Opciones de juego (0 = izquierda, 1 = derecha)
 
+// Dirección del movimiento
 enum Direction {
   LEFT, // moverse a la izquierda
   RIGHT // moverse a la derecha
 };
 
-int xPlayerPos = 3;
-int yPlayerPos = 1;
+int xPlayerPos = 3, int yPlayerPos = 1; //Posicion del jugador
 bool isJumping = false;
 Direction playerDirection = RIGHT;
 
-int xObstacleLowerPos = 15;
-int xObstacleUpperPos = 22; // Aparece con desfase
+int xObstacleLowerPos = 15, int xObstacleUpperPos = 22; // Posición de los obstáculos
 Direction directionLower = LEFT;
 Direction directionUpper = LEFT;
 
-int score = 0;
+int score = 0;  // Puntaje actual
 uint8_t scoreDigits;
-int xCoinPos;
-int yCoinPos;
+int xCoinPos, yCoinPos;  // Posición de la moneda
 
+// Caracteres personalizados para la pantalla LCD
 uint8_t caracter1[] = {
   B01100, B01100, B00000, B01100, B01100, B01100, B01100, B01110,
 };
@@ -111,38 +110,40 @@ const unsigned long playerMoveInterval = 100;  // Intervalo de tiempo para mover
 const unsigned long jumpInterval = 200;  // Intervalo de tiempo para el salto
 unsigned long currentTime;
 
-/*~~~~~~~~~~~~~~~~~~~~~~~ Game ~~~~~~~~~~~~~~~~~~~~~~~*/
+/*~~~~~~~~~~~~~~~~~~~~~~ Game ~~~~~~~~~~~~~~~~~~~~~~~*/
+// Función principal del juego que se ejecuta en el núcleo 1
 void Loop1(void *pvParameters) {
-  showIntro();
+  showIntro();  // Muestra la introducción del juego
   isGameRunning = true;
 
-  for (;;) {
-    currentTime = millis();
+  for (;;) {  // Bucle infinito para el juego
+    currentTime = millis();  // Obtiene el tiempo actual para la sincronización
 
     if (isGameOver) {
-      handleGameOver(selectedOption);
+      handleGameOver(selectedOption);  // Maneja la pantalla de fin de juego
     } else if (isPaused) {
-      handlePauseMenu(selectedOption, isPaused);
+      handlePauseMenu(selectedOption, isPaused);  // Maneja el menú de pausa
     } else if (isMenu) {
-      handleMenu(selectedOption);
+      handleMenu(selectedOption);  // Maneja el menú principal
     } else if (isGameRunning) {
-      // Verificar si se presiona el botón de pausa
+      // Verifica si se presiona el botón de pausa
       if (digitalRead(SEL_PIN) == LOW) {
         isPaused = true;
         selectedOption = 0;
         showPauseMenu(selectedOption);
-        delay(200); // Debounce
+        delay(200);  // Debounce para evitar múltiples detecciones
         continue;
       }
 
-      // Lógica del juego existente
+      // Actualiza los elementos del juego
       updatePlayer();
       updateObstacles();
-      saveScore(score);
+      saveScore(score);  // Guarda el puntaje actual
     }
   }
 }
 
+// Maneja la pantalla de fin de juego y las opciones disponibles
 void handleGameOver(int &selectedOption) {
   static bool optionsShown = false;
 
@@ -151,77 +152,80 @@ void handleGameOver(int &selectedOption) {
     optionsShown = true;
   }
 
-  // Manejar la selección de opciones
-  if (analogRead(HORZ_PIN) == 4095) {
+  // Maneja la selección de opciones con el joystick
+  if (analogRead(HORZ_PIN) == 4095) {  // Joystick movido a la derecha
     selectedOption = 1;
     showGameOverOptions(selectedOption);
-  } else if (analogRead(HORZ_PIN) == 0) {
+  } else if (analogRead(HORZ_PIN) == 0) {  // Joystick movido a la izquierda
     selectedOption = 0;
     showGameOverOptions(selectedOption);
   }
 
+  // Procesa la selección cuando se presiona el botón
   if (digitalRead(SEL_PIN) == LOW) {
     if (selectedOption == 0) {
-      // Reiniciar juego
-      resetGame();
+      resetGame();  // Reinicia el juego
       isGameOver = false;
       isGameRunning = true;
     } else {
-      goToMenu();
+      goToMenu();  // Vuelve al menú principal
     }
     optionsShown = false;
-    delay(200); // Debounce
+    delay(200);  // Debounce para evitar múltiples detecciones
   }
 }
 
+// Maneja el menú de pausa y las opciones disponibles
 void handlePauseMenu(int &selectedOption, bool &isPaused) {
-  // Manejar la selección de opciones
-  if (analogRead(HORZ_PIN) == 4095) {
+  // Maneja la selección de opciones con el joystick
+  if (analogRead(HORZ_PIN) == 4095) {  // Joystick movido a la derecha
     selectedOption = 1;
     showPauseMenu(selectedOption);
-  } else if (analogRead(HORZ_PIN) == 0) {
+  } else if (analogRead(HORZ_PIN) == 0) {  // Joystick movido a la izquierda
     selectedOption = 0;
     showPauseMenu(selectedOption);
   }
 
+  // Procesa la selección cuando se presiona el botón
   if (digitalRead(SEL_PIN) == LOW) {
     if (selectedOption == 0) {
-      // Reanudar juego
       isPaused = false;
       lcd.clear();
-      // Redibujar el estado del juego
-      redrawGameState();
+      redrawGameState();  // Redibuja el estado del juego al reanudar
     } else {
-      goToMenu();
+      goToMenu();  // Vuelve al menú principal
     }
-    delay(200); // Debounce
+    delay(200);  // Debounce para evitar múltiples detecciones
   }
 }
 
+// Muestra las opciones de fin de juego en la pantalla LCD
 void showGameOverOptions(int selectedOption) {
   lcd.clear();
   lcd.setCursor(3, 0);
   lcd.print("GAME OVER");
   lcd.setCursor(0, 1);
-  lcd.print(selectedOption == 0 ? ">" : " ");
+  lcd.print(selectedOption == 0 ? ">" : " ");  // Muestra un cursor para la opción seleccionada
   lcd.print("Reiniciar");
   lcd.setCursor(11, 1);
   lcd.print(selectedOption == 1 ? ">" : " ");
   lcd.print("Menu");
 }
 
+// Muestra el menú de pausa en la pantalla LCD
 void showPauseMenu(int selectedOption) {
   lcd.clear();
   lcd.setCursor(5, 0);
   lcd.print("PAUSA");
   lcd.setCursor(0, 1);
-  lcd.print(selectedOption == 0 ? ">" : " ");
+  lcd.print(selectedOption == 0 ? ">" : " ");  // Muestra un cursor para la opción seleccionada
   lcd.print("Reanudar");
   lcd.setCursor(10, 1);
   lcd.print(selectedOption == 1 ? ">" : " ");
   lcd.print("Menu");
 }
 
+// Cambia al menú principal
 void goToMenu() {
   isGameRunning = false;
   isGameOver = false;
@@ -231,41 +235,44 @@ void goToMenu() {
   showMenu(selectedOption);
 }
 
+// Muestra el menú principal en la pantalla LCD
 void showMenu(int selectedOption) {
   lcd.clear();
   lcd.setCursor(5, 0);
   lcd.print("MENU");
   lcd.setCursor(0, 1);
-  lcd.print(selectedOption == 0 ? ">" : " ");
+  lcd.print(selectedOption == 0 ? ">" : " ");  // Muestra un cursor para la opción seleccionada
   lcd.print("Iniciar");
   lcd.setCursor(9, 1);
   lcd.print(selectedOption == 1 ? ">" : " ");
   lcd.print("Scores");
 }
 
+// Maneja la interacción con el menú principal
 void handleMenu(int &selectedOption) {
-  // Manejar la selección de opciones
-  if (analogRead(HORZ_PIN) == 4095) {
+  // Maneja la selección de opciones con el joystick
+  if (analogRead(HORZ_PIN) == 4095) {  // Joystick movido a la derecha
     selectedOption = 1;
     showMenu(selectedOption);
-  } else if (analogRead(HORZ_PIN) == 0) {
+  } else if (analogRead(HORZ_PIN) == 0) {  // Joystick movido a la izquierda
     selectedOption = 0;
     showMenu(selectedOption);
   }
 
+  // Procesa la selección cuando se presiona el botón
   if (digitalRead(SEL_PIN) == LOW) {
     if (selectedOption == 0) {
-      // Iniciar juego
       isMenu = false;
       isGameRunning = true;
-      resetGame();
+      resetGame();  // Inicia un nuevo juego
     } else {
-      showScores();
+      showScores();  // Muestra la pantalla de puntajes
     }
-    delay(200); // Debounce
+    delay(200);  // Debounce para evitar múltiples detecciones
   }
 }
 
+// Muestra los puntajes más altos en la pantalla LCD
 void showScores() {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -273,15 +280,16 @@ void showScores() {
   for (int i = 0; i < 4; i++) {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print(i + 1);        // Mostrar la posición
+    lcd.print(i + 1);
     lcd.print(". Puntaje: ");
-    lcd.print(scores[i]);     // Mostrar el puntaje correspondiente
-    delay(2000);              // Pausa de 2 segundos para cada puntaje
+    lcd.print(scores[i]);
+    delay(2000);  // Muestra cada puntaje durante 2 segundos
   }
   lcd.clear();
-  showMenu(selectedOption);  // Regresar al menú después de mostrar los puntajes
+  showMenu(selectedOption);  // Vuelve al menú principal después de mostrar los puntajes
 }
 
+// Reinicia todas las variables del juego a sus valores iniciales
 void resetGame() {
   xPlayerPos = 3;
   yPlayerPos = 1;
@@ -291,65 +299,64 @@ void resetGame() {
   directionLower = LEFT;
   directionUpper = LEFT;
   score = 0;
-  spawnCoin();
+  spawnCoin();  // Genera una nueva moneda
   lcd.clear();
 }
 
+// Redibuja todos los elementos del juego en la pantalla LCD
 void redrawGameState() {
-  // Redibujar el jugador
+  // Dibuja al jugador
   lcd.setCursor(xPlayerPos, yPlayerPos);
   lcd.write(playerDirection == RIGHT ? PLAYER_RIGHT : PLAYER_LEFT);
   
-  // Redibujar los obstáculos
+  // Dibuja los obstáculos
   lcd.setCursor(xObstacleLowerPos, 1);
   lcd.write(directionLower == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
   lcd.setCursor(xObstacleUpperPos, 0);
   lcd.write(directionUpper == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
   
-  // Redibujar la moneda
-  drawCoin();
+  drawCoin();  // Dibuja la moneda
   
-  // Mostrar el puntaje
+  // Muestra el puntaje actual
   scoreDigits = (score > 9999) ? 5 : (score > 999) ? 4 : (score > 99) ? 3 : (score > 9) ? 2 : 1;
   lcd.setCursor(16 - scoreDigits, 0);
   lcd.print(score);
 }
 
+// Actualiza la posición y estado del jugador
 void updatePlayer() {
   if (currentTime - previousTimePlayer > playerMoveInterval) {
     previousTimePlayer = currentTime;
 
-    // Leer el estado del joystick vertical (saltar)
-    if (!isJumping && analogRead(VERT_PIN) == 0) {
+    // Maneja el salto del jugador
+    if (!isJumping && analogRead(VERT_PIN) == 0) {  // Joystick movido hacia arriba
       lcd.setCursor(xPlayerPos, yPlayerPos);
-      lcd.print(' ');
-      yPlayerPos = 0;
+      lcd.print(' ');  // Borra la posición anterior
+      yPlayerPos = 0;  // Mueve al jugador a la fila superior
       isJumping = true;
       previousTimeJump = currentTime;
     } else if (isJumping && currentTime - previousTimeJump > jumpInterval) {
       previousTimeJump = currentTime;
       lcd.setCursor(xPlayerPos, yPlayerPos);
-      lcd.print(' ');
-      yPlayerPos = 1;
+      lcd.print(' ');  // Borra la posición anterior
+      yPlayerPos = 1;  // Devuelve al jugador a la fila inferior
       isJumping = false;
     }
 
-    // Leer el estado del joystick horizontal (moverse a la derecha)
-    if (analogRead(HORZ_PIN) == 4095) {
+    // Maneja el movimiento horizontal del jugador
+    if (analogRead(HORZ_PIN) == 4095) {  // Joystick movido a la derecha
       if (xPlayerPos < 15) {
         lcd.setCursor(xPlayerPos, yPlayerPos);
-        lcd.print(' ');
+        lcd.print(' ');  // Borra la posición anterior
         xPlayerPos++;
         lcd.setCursor(xPlayerPos, yPlayerPos);
         lcd.write(PLAYER_RUNNING_RIGHT);
         playerDirection = RIGHT;
       }
-    }
-    // Leer el estado del joystick horizontal (moverse a la izquierda)
-    else if (analogRead(HORZ_PIN) == 0) {
+    } else if (analogRead(HORZ_PIN) == 0) {  // Joystick movido a la izquierda
       if (xPlayerPos > 0) {
         lcd.setCursor(xPlayerPos, yPlayerPos);
-        lcd.print(' ');
+        lcd.print(' ');  // Borra la posición anterior
         xPlayerPos--;
         lcd.setCursor(xPlayerPos, yPlayerPos);
         lcd.write(PLAYER_RUNNING_LEFT);
@@ -362,21 +369,22 @@ void updatePlayer() {
       lcd.setCursor(xPlayerPos, yPlayerPos);
       lcd.write(PLAYER_LEFT);
     }
-    checkCollisions();
+    checkCollisions();  // Verifica colisiones después de mover al jugador
   }
 }
 
+// Actualiza la posición de los obstáculos
 void updateObstacles() {
   if (currentTime - previousTimeObstacle > obstacleInterval) {
     previousTimeObstacle = currentTime;
 
-    // Borrar las posiciones anteriores de los obstáculos
+    // Borra las posiciones anteriores de los obstáculos
     lcd.setCursor(xObstacleLowerPos, 1);
     lcd.print(' ');
     lcd.setCursor(xObstacleUpperPos, 0);
     lcd.print(' ');
 
-    // Mover obstáculo inferior
+    // Mueve el obstáculo inferior
     if (directionLower == LEFT) {
       if (xObstacleLowerPos > 0) {
         xObstacleLowerPos--;
@@ -393,7 +401,7 @@ void updateObstacles() {
       }
     }
 
-    // Mover obstáculo superior
+    // Mueve el obstáculo superior
     if (directionUpper == LEFT) {
       if (xObstacleUpperPos > 0) {
         xObstacleUpperPos--;
@@ -410,28 +418,28 @@ void updateObstacles() {
       }
     }
 
-    // Dibujar los obstáculos en las nuevas posiciones
+    // Dibuja los obstáculos en sus nuevas posiciones
     lcd.setCursor(xObstacleLowerPos, 1);
     lcd.write(directionLower == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
     lcd.setCursor(xObstacleUpperPos, 0);
     lcd.write(directionUpper == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
 
-    // Si el obstáculo pasó sobre la moneda, redibujar la moneda
-    drawCoin();
-
-    checkCollisions();
+    drawCoin();  // Asegura que la moneda siga visible
+    checkCollisions();  // Verifica colisiones después de mover los obstáculos
   }
 }
 
+// Verifica colisiones entre el jugador, los obstáculos y la moneda
 void checkCollisions() {
   if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
       (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
     isGameOver = true;
     isGameRunning = false;
   }
-  checkCoinCollision();
+  checkCoinCollision();  // Verifica si el jugador ha recogido la moneda
 }
 
+// Inicializa los puntajes en la tarjeta SD si no existen
 void initializeScores() {
   if (!SD.exists(SCORES_FILE)) {
     DynamicJsonDocument doc(256);
@@ -447,6 +455,7 @@ void initializeScores() {
   }
 }
 
+// Carga los puntajes desde la tarjeta SD
 void loadScores() {
   File file = SD.open(SCORES_FILE);
   if (file) {
@@ -462,6 +471,7 @@ void loadScores() {
   }
 }
 
+// Guarda un nuevo puntaje si es lo suficientemente alto
 void saveScore(int newScore) {
   // Insertar el nuevo puntaje en el array y ordenar
   bool inserted = false;  // Variable para indicar si el puntaje ha sido insertado
@@ -534,6 +544,7 @@ void checkCoinCollision() {
   }
 }
 
+// Verifica colisión del jugador con los obstáculos
 bool checkCollision() {
   if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
       (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
@@ -547,50 +558,53 @@ bool checkCollision() {
   return false;
 }
 
-// Función para guardar los puntajes en un archivo JSON
-
 /*~~~~~~~~~~~~~~~~~~~~~~ Audio ~~~~~~~~~~~~~~~~~~~~~~~*/
+
+// Maneja la reproducción de audio en el núcleo 2
 void Loop2(void * pvParameters) {
   const TickType_t xDelay = pdMS_TO_TICKS(10);
   bool gameOverSoundPlayed = false;
   unsigned long gameOverStartTime = 0;
-  const unsigned long gameOverDuration = 2000; // Duración aprox del archivo gameover.mp3 en milisegundos
+  const unsigned long gameOverDuration = 2000; // Duración aprox. de gameover.mp3
   bool introPlayed = false;
 
   while (true) {
+    // Reproducción de sonido de Game Over
     if (isGameOver) {
       if (!gameOverSoundPlayed) {
-        if (audio.isRunning()) {
-          audio.stopSong();
-        }
-        Serial.println(F("Core 0: Iniciando reproducción de melodía de game over..."));
+        audio.stopSong();
+        Serial.println(F("Core 0: Iniciando melodía de game over..."));
         audio.connecttoFS(SD, "/gameover.mp3");
         gameOverSoundPlayed = true;
         gameOverStartTime = millis();
       } else if (millis() - gameOverStartTime > gameOverDuration) {
-        if (audio.isRunning()) {
-          audio.stopSong();
-          Serial.println(F("Core 0: Reproducción de game over finalizada."));
-        }
+        audio.stopSong();
+        Serial.println(F("Core 0: Fin de melodía de game over."));
       }
-    } else if (isGameRunning) {
+    } 
+    // Reproducción de música durante el juego
+    else if (isGameRunning) {
       if (audio.isRunning() && introPlayed) {
         audio.stopSong();
         Serial.println(F("Core 0: Deteniendo música de intro."));
       }
       if (!audio.isRunning()) {
-        Serial.println(F("Core 0: Iniciando reproducción de melodía de gameplay..."));
+        Serial.println(F("Core 0: Iniciando música de gameplay..."));
         audio.connecttoFS(SD, "/gameplay.mp3");
       }
       gameOverSoundPlayed = false;
       introPlayed = false;
-    } else if (isIntro) {
+    } 
+    // Reproducción de música de introducción
+    else if (isIntro) {
       if (!audio.isRunning() && !introPlayed) {
-        Serial.println(F("Core 0: Iniciando reproducción de intro..."));
+        Serial.println(F("Core 0: Iniciando música de intro..."));
         audio.connecttoFS(SD, "/intro.mp3");
         introPlayed = true;
       }
-    } else {
+    } 
+    // Detener la reproducción si no estamos en ninguno de los estados anteriores
+    else {
       if (audio.isRunning()) {
         audio.stopSong();
         Serial.println(F("Core 0: Reproducción detenida."));
@@ -598,20 +612,18 @@ void Loop2(void * pvParameters) {
     }
     
     audio.loop();
-    
-    // Ceder el control brevemente
-    vTaskDelay(xDelay);
+    vTaskDelay(xDelay); // Ceder el control brevemente para permitir otras tareas
   }
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~ Función Setup ~~~~~~~~~~~~~~~~~~~~~~*/
-void setup ( void ) {
-  Serial.begin ( BAUD_RATE );
 
-  pinMode(SEL_PIN, INPUT_PULLUP); 
-    
-  lcd.init();
+// Configuración inicial del juego
+void setup() {
+  Serial.begin(BAUD_RATE);
+  pinMode(SEL_PIN, INPUT_PULLUP);
   
+  lcd.init();
   lcd.createChar(PLAYER_RIGHT, caracter1);
   lcd.createChar(PLAYER_LEFT, caracter2);
   lcd.createChar(PLAYER_RUNNING_RIGHT, caracter3);
@@ -619,45 +631,39 @@ void setup ( void ) {
   lcd.createChar(OBSTACLE_RIGHT, caracter5);
   lcd.createChar(OBSTACLE_LEFT, caracter6);
   lcd.createChar(COIN, caracter7);
-
   lcd.backlight();
 
-  // Set microSD Card CS as OUTPUT and set HIGH
-  pinMode(SD_CS, OUTPUT);      
+  // Configuración de la tarjeta microSD como salida 
+  pinMode(SD_CS, OUTPUT);
   digitalWrite(SD_CS, HIGH); 
-  
-  // Initialize SPI bus for microSD Card
+
+  // Se inicializa el bus SPI para la microSD
   SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
 
-  // Start microSD Card
-  if(!SD.begin(SD_CS))
-  {
+  if (!SD.begin(SD_CS)) {
     Serial.println(F("Error accessing microSD card!"));
-    while(true); 
+    while(true);
   }
   Serial.println("Tarjeta SD iniciada correctamente.");
 
-  // Setup I2S 
+  // Configuración de audio I2S
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-  
-  // Set Volume
   audio.setVolume(20);
 
   initializeScores();
   loadScores();
-  
-  /* Pasar los loops como punteros a función */
-  DCESP32.ConfigCores(Loop1, Loop2); 
 
-  Serial.println(F( "Se han configurado correctamente los dos nucleos "));
+  // Configurar los núcleos
+  DCESP32.ConfigCores(Loop1, Loop2);
+  Serial.println(F("Se han configurado correctamente los dos nucleos"));
 }
 
-void showIntro() {  
-  // Mostrar el nombre del juego en la fila inferior
-  lcd.setCursor(4, 1);  // Centrar el texto en la fila inferior
+// Muestra la introducción del juego
+void showIntro() {
+  lcd.setCursor(4, 1);
   lcd.print("JUMP MAN");
 
-  // Mostrar el logotipo desplazandose
+  // Animación del logotipo
   for (int i = 0; i < 18; i++) {
     lcd.setCursor(i-3, 0);
     lcd.print(" ");
@@ -672,12 +678,11 @@ void showIntro() {
 
   lcd.clear();
 
-  // Mostrar los nombres de los creadores de dos en dos
-  String nombres[] = {"Daniel Astilla", "Alejandro Barajas","Javier Gonzalez", "Daniel Ramirez", "Bruno Sanchez"};
+  // Mostrar nombres de los creadores
+  String nombres[] = {"Daniel Astilla", "Alejandro Barajas", "Javier Gonzalez", "Daniel Ramirez", "Bruno Sanchez"};
   int numNombres = 5;
   
   for (int i = 0; i < numNombres; i += 2) {
-    // Mostrar los nombres en dos filas
     lcd.setCursor(0, 0);
     lcd.print(nombres[i]);
     
@@ -686,13 +691,15 @@ void showIntro() {
       lcd.print(nombres[i + 1]);
     }
     
-    delay(2000);  // Mostrar cada par de nombres durante 3 segundos
+    delay(2000);
     lcd.clear();
   }
 
   isIntro = false;
 }
 
-void loop ( void ) {
+// Bucle principal (vacío ya que la lógica se maneja en los núcleos)
+void loop() {
   // No se necesita hacer nada en el loop principal
+}
 }
