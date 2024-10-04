@@ -347,7 +347,8 @@ void updatePlayer() {
       lcd.setCursor(xPlayerPos, yPlayerPos);
       lcd.write(PLAYER_LEFT);
     }
-    checkCollisions();
+    checkObstacleCollision();
+    checkCoinCollision();
   }
 }
 
@@ -403,35 +404,20 @@ void updateObstacles() {
     lcd.setCursor(xObstacleUpperPos, 0);
     lcd.write(directionUpper == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
 
-    // Si el obstáculo pasó sobre la moneda, redibujar la moneda
-    drawCoin();
+    drawCoin(); // Redibujar la moneda por si el obstaculo paso sobre ella
     drawScore();
-    checkCollisions();
+    checkObstacleCollision();
   }
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~ Collisions ~~~~~~~~~~~~~~~~~~~~~~~*/
 
-bool checkCollision() {
+void checkObstacleCollision() {
   if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
       (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
-    lcd.clear();
-    lcd.setCursor(3, 0);
-    lcd.print("GAME OVER");
-    isGameOver = true;
-    isGameRunning = false;
-    return isGameOver;
-  }
-  return false;
-}
-
-void checkCollisions() {
-  if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
-      (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
-    isGameOver = true;
+    isGameOver = false;
     isGameRunning = false;
   }
-  checkCoinCollision();
 }
 
 // Función para verificar si el jugador ha tocado la moneda
@@ -440,10 +426,8 @@ void checkCoinCollision() {
     score++;
     saveScore(score);
 
-    // Borrar la moneda de la pantalla
     lcd.setCursor(xCoinPos, yCoinPos);
     lcd.print(' ');
-
     // Generar una nueva moneda en una posición aleatoria
     spawnCoin();
 
@@ -457,7 +441,7 @@ void checkCoinCollision() {
 void spawnCoin() {
   bool coinSafePosition = false;
   while (!coinSafePosition) {
-    xCoinPos = random(0, 16); // Generar posición X aleatoria
+    xCoinPos = random(0, 14); // Generar posición X aleatoria
     yCoinPos = random(0, 2);  // Generar posición Y (0 o 1)
     
     // Verificar si la posición de la moneda no choca con los obstáculos
