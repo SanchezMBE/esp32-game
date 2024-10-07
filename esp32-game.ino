@@ -121,6 +121,7 @@ void Loop1(void *pvParameters) {
     currentTime = millis();
 
     if (isGameOver) {
+      saveScore(score);
       handleGameOver(selectedOption);
     } else if (isPaused) {
       handlePauseMenu(selectedOption, isPaused);
@@ -347,7 +348,7 @@ void updatePlayer() {
       lcd.setCursor(xPlayerPos, yPlayerPos);
       lcd.write(PLAYER_LEFT);
     }
-    checkObstacleCollision();
+    checkCollisions();
     checkCoinCollision();
   }
 }
@@ -404,18 +405,20 @@ void updateObstacles() {
     lcd.setCursor(xObstacleUpperPos, 0);
     lcd.write(directionUpper == LEFT ? OBSTACLE_LEFT : OBSTACLE_RIGHT);
 
-    drawCoin(); // Redibujar la moneda por si el obstaculo paso sobre ella
+    // Si el obstáculo pasó sobre la moneda, redibujar la moneda
+    drawCoin();
     drawScore();
-    checkObstacleCollision();
+    checkCollisions();
   }
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~ Collisions ~~~~~~~~~~~~~~~~~~~~~~~*/
 
-void checkObstacleCollision() {
+
+void checkCollisions() {
   if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
       (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
-    isGameOver = false;
+    isGameOver = true;
     isGameRunning = false;
   }
 }
@@ -424,10 +427,11 @@ void checkObstacleCollision() {
 void checkCoinCollision() {
   if (xPlayerPos == xCoinPos && yPlayerPos == yCoinPos) {
     score++;
-    saveScore(score);
-
+    
+    // Borrar la moneda de la pantalla
     lcd.setCursor(xCoinPos, yCoinPos);
     lcd.print(' ');
+
     // Generar una nueva moneda en una posición aleatoria
     spawnCoin();
 
@@ -441,7 +445,7 @@ void checkCoinCollision() {
 void spawnCoin() {
   bool coinSafePosition = false;
   while (!coinSafePosition) {
-    xCoinPos = random(0, 14); // Generar posición X aleatoria
+    xCoinPos = random(0, 16); // Generar posición X aleatoria
     yCoinPos = random(0, 2);  // Generar posición Y (0 o 1)
     
     // Verificar si la posición de la moneda no choca con los obstáculos
@@ -512,6 +516,8 @@ void saveScore(int newScore) {
 }
 
 void saveScoresToSD() {
+        Serial.println("guardar en sd");
+
   DynamicJsonDocument doc(1024);
   // Asigna los puntajes a las claves específicas en el JSON
   doc["score1"] = scores[0];
