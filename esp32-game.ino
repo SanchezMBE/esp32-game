@@ -46,11 +46,12 @@ bool isIntro = true;
 bool isMenu = false;
 bool isGameRunning = false;
 bool isGameOver = false;
+bool isPaused = false;
+bool isCoinCollected = false;
 
 // Game values
 int scores[4] = {0}; // Array para almacenar los puntajes (máximo 4)
 int menuSelectedOption = 0;
-bool isPaused = false;
 int selectedOption = 0; // 0 para la opción izquierda, 1 para la derecha
 
 enum Direction {
@@ -69,7 +70,7 @@ Direction directionLower = LEFT;
 Direction directionUpper = LEFT;
 
 int score = 0;
-uint8_t scoreDigits;
+uint8_t scoreDigits = 1;
 int xCoinPos;
 int yCoinPos;
 
@@ -121,7 +122,6 @@ void Loop1(void *pvParameters) {
     currentTime = millis();
 
     if (isGameOver) {
-      saveScore(score);
       handleGameOver(selectedOption);
     } else if (isPaused) {
       handlePauseMenu(selectedOption, isPaused);
@@ -130,6 +130,7 @@ void Loop1(void *pvParameters) {
     } else if (isGameRunning) {
       // Verificar si se presiona el botón de pausa
       if (digitalRead(SEL_PIN) == LOW) {
+        isGameRunning = false;
         isPaused = true;
         selectedOption = 0;
         showPauseMenuOpctions(selectedOption);
@@ -192,7 +193,8 @@ void showScores() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Scores:");
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < MAX_SCORES; i++) {
+    if (scores[i] == 0) break;
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print(i + 1);        // Mostrar la posición
@@ -270,6 +272,7 @@ void handlePauseMenu(int &selectedOption, bool &isPaused) {
   if (digitalRead(SEL_PIN) == LOW) {
     if (selectedOption == 0) {
       // Reanudar juego
+      isGameRunning = true;
       isPaused = false;
       lcd.clear();
       // Redibujar el estado del juego
@@ -348,7 +351,7 @@ void updatePlayer() {
       lcd.setCursor(xPlayerPos, yPlayerPos);
       lcd.write(PLAYER_LEFT);
     }
-    checkCollisions();
+    checkObstacleCollision();
     checkCoinCollision();
   }
 }
@@ -408,16 +411,16 @@ void updateObstacles() {
     // Si el obstáculo pasó sobre la moneda, redibujar la moneda
     drawCoin();
     drawScore();
-    checkCollisions();
+    checkObstacleCollision();
   }
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~ Collisions ~~~~~~~~~~~~~~~~~~~~~~~*/
 
-
-void checkCollisions() {
+void checkObstacleCollision() {
   if ((xObstacleLowerPos == xPlayerPos && yPlayerPos == 1) || 
       (xObstacleUpperPos == xPlayerPos && yPlayerPos == 0)) {
+    saveScore(score);
     isGameOver = true;
     isGameRunning = false;
   }
@@ -426,8 +429,12 @@ void checkCollisions() {
 // Función para verificar si el jugador ha tocado la moneda
 void checkCoinCollision() {
   if (xPlayerPos == xCoinPos && yPlayerPos == yCoinPos) {
+    // incrementamos el score de la partida
     score++;
     
+    // Levantar la bandera para activar el audio coin.mp3
+    isCoinCollected = true;
+
     // Borrar la moneda de la pantalla
     lcd.setCursor(xCoinPos, yCoinPos);
     lcd.print(' ');
@@ -445,7 +452,7 @@ void checkCoinCollision() {
 void spawnCoin() {
   bool coinSafePosition = false;
   while (!coinSafePosition) {
-    xCoinPos = random(0, 16); // Generar posición X aleatoria
+    xCoinPos = random(0, (scoreDigits == 1) ? 15 : (scoreDigits == 2) ? 14 : (scoreDigits == 3) ? 13 : (scoreDigits == 4) ? 12 : 11); // Generar posición X aleatoria
     yCoinPos = random(0, 2);  // Generar posición Y (0 o 1)
     
     // Verificar si la posición de la moneda no choca con los obstáculos
@@ -504,6 +511,13 @@ void drawCoin() {
 /*~~~~~~~~~~~~~~~~~~~~ Manejo de scores ~~~~~~~~~~~~~~~~~~~~~~*/
 
 void saveScore(int newScore) {
+  // Verificar si el puntaje ya existe
+  for (int i = 0; i < MAX_SCORES; i++) {
+    if (scores[i] == newScore) {
+      return; // Si ya existe, no hacer nada
+    }
+  }
+
   int i = MAX_SCORES - 1;
   // Busca la posición correcta para el nuevo puntaje
   for (; i >= 0 && newScore > scores[i]; i--) {
@@ -516,8 +530,6 @@ void saveScore(int newScore) {
 }
 
 void saveScoresToSD() {
-        Serial.println("guardar en sd");
-
   DynamicJsonDocument doc(1024);
   // Asigna los puntajes a las claves específicas en el JSON
   doc["score1"] = scores[0];
@@ -570,59 +582,66 @@ void loadScores() {
 /*~~~~~~~~~~~~~~~~~~~~~~ Audio Loop ~~~~~~~~~~~~~~~~~~~~~~~*/
 
 void Loop2(void * pvParameters) {
-  const TickType_t xDelay = pdMS_TO_TICKS(10);
   bool gameOverSoundPlayed = false;
-  unsigned long gameOverStartTime = 0;
-  const unsigned long gameOverDuration = 2000; // Duración aprox del archivo gameover.mp3 en milisegundos
-  bool introPlayed = false;
+  bool coinSoundPlaying = false;
+  unsigned long coinSoundStartTime = 0;
+  const unsigned long coinSoundDuration = 1000; // Duración estimada del sonido de moneda en milisegundos
 
   for (;;) {
-    if (isGameOver) {
-      if (!gameOverSoundPlayed) {
-        if (audio.isRunning()) {
-          audio.stopSong();
+    unsigned long currentTime = millis();
+
+    if (isGameRunning) {
+      if (isCoinCollected) {
+        if (!coinSoundPlaying) {
+          // Iniciar el sonido de moneda sin detener la música de fondo
+          Serial.println(F("Core 0: Reproduciendo sonido de moneda..."));
+          audio.connecttoFS(SD, "/coin.mp3");
+          coinSoundPlaying = true;
+          coinSoundStartTime = currentTime;
+          isCoinCollected = false;
         }
+      }
+      if (coinSoundPlaying && (currentTime - coinSoundStartTime > coinSoundDuration)) {
+        // El sonido de moneda ha terminado, volver a la música de gameplay
+        coinSoundPlaying = false;
+        if (!audio.isRunning()) {
+          Serial.println(F("Core 0: Volviendo a la melodía de gameplay..."));
+          audio.connecttoFS(SD, "/gameplay.mp3");
+        }
+      }
+      if (!audio.isRunning() && !coinSoundPlaying) {
+        Serial.println(F("Core 0: Iniciando reproducción de melodía de gameplay..."));
+        audio.connecttoFS(SD, "/gameplay.mp3");
+        gameOverSoundPlayed = false;
+      }
+    }
+    else if (isGameOver) {
+      if (!gameOverSoundPlayed) {
+        audio.stopSong();
         Serial.println(F("Core 0: Iniciando reproducción de melodía de game over..."));
         audio.connecttoFS(SD, "/gameover.mp3");
         gameOverSoundPlayed = true;
-        gameOverStartTime = millis();
-      } else if (millis() - gameOverStartTime > gameOverDuration) {
-        if (audio.isRunning()) {
-          audio.stopSong();
-          Serial.println(F("Core 0: Reproducción de game over finalizada."));
-        }
-      }
-    } else if (isGameRunning) {
-      if (audio.isRunning() && introPlayed) {
-        audio.stopSong();
-        Serial.println(F("Core 0: Deteniendo música de intro."));
-      }
-      if (!audio.isRunning()) {
-        Serial.println(F("Core 0: Iniciando reproducción de melodía de gameplay..."));
-        audio.connecttoFS(SD, "/gameplay.mp3");
-      }
-      gameOverSoundPlayed = false;
-      introPlayed = false;
-    } else if (isIntro) {
-      if (!audio.isRunning() && !introPlayed) {
-        Serial.println(F("Core 0: Iniciando reproducción de intro..."));
-        audio.connecttoFS(SD, "/intro.mp3");
-        introPlayed = true;
-      }
-    } else {
-      if (audio.isRunning()) {
-        audio.stopSong();
-        Serial.println(F("Core 0: Reproducción detenida."));
       }
     }
+    else if (isIntro) {
+      if (!audio.isRunning()) {
+        Serial.println(F("Core 0: Iniciando reproducción de intro..."));
+        audio.connecttoFS(SD, "/intro.mp3");
+      }
+    }
+    else if (audio.isRunning() || (isPaused && audio.isRunning())) {
+      audio.stopSong();
+      Serial.println(F("Core 0: Reproducción detenida."));
+    }
     
-    audio.loop();
+    if (audio.isRunning()) {
+      audio.loop();
+    }
     
     // Ceder el control brevemente
-    vTaskDelay(xDelay);
+    vTaskDelay(10);
   }
 }
-
 /*~~~~~~~~~~~~~~~~~~~~~~ Función Setup ~~~~~~~~~~~~~~~~~~~~~~*/
 
 void setup ( void ) {
@@ -655,13 +674,13 @@ void setup ( void ) {
     Serial.println(F("Error accessing microSD card!"));
     while(true); 
   }
-  Serial.println("Tarjeta SD iniciada correctamente.");
+  Serial.println(F("Tarjeta SD iniciada correctamente."));
 
   // Setup I2S 
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
   
   // Set Volume
-  audio.setVolume(20);
+  audio.setVolume(5);
 
   initializeScores();
   loadScores();
@@ -709,7 +728,7 @@ void showIntro() {
       lcd.print(nombres[i + 1]);
     }
     
-    delay(1500);  // Mostrar cada par de nombres durante 3 segundos
+    delay(1300);  // Mostrar cada par de nombres durante un tiempo
     lcd.clear();
   }
 
