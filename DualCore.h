@@ -37,7 +37,7 @@ void DualCoreESP32::ConfigCores(TaskFunction_t loop1, TaskFunction_t loop2) {
     "Ciclo2",             /* Etiqueta de la tarea.          */
     10000,                /* Tamaño en memoria RAM.         */
     NULL,                 /* Parámetros de la tarea.        */
-    1,                    /* Prioridad de la tarea.         */
+    0,                    /* Prioridad de la tarea.         */
     &Hilo2,               /* Seguimiento de la tarea.       */
     NUCLEO_SECUNDARIO     /* Número de núcleo.              */
   );

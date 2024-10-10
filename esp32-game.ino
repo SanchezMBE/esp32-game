@@ -38,6 +38,8 @@
 DualCoreESP32 DCESP32;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Audio audio;
+DynamicJsonDocument doc(1024);
+
 const char* SCORES_FILE = "/scores.json";
 const int MAX_SCORES = 4;
 
@@ -530,7 +532,6 @@ void saveScore(int newScore) {
 }
 
 void saveScoresToSD() {
-  DynamicJsonDocument doc(1024);
   // Asigna los puntajes a las claves específicas en el JSON
   doc["score1"] = scores[0];
   doc["score2"] = scores[1];
@@ -546,7 +547,6 @@ void saveScoresToSD() {
 
 void initializeScores() {
   if (!SD.exists(SCORES_FILE)) {
-    DynamicJsonDocument doc(1024);
     // Inicializa los puntajes en el JSON con 0
     doc["score1"] = 0;
     doc["score2"] = 0;
@@ -564,7 +564,6 @@ void initializeScores() {
 void loadScores() {
   File file = SD.open(SCORES_FILE);
   if (file) {
-    DynamicJsonDocument doc(1024);
     DeserializationError error = deserializeJson(doc, file);
     if (!error) {
       // Se imprime en la consola serial formateado
@@ -582,7 +581,7 @@ void loadScores() {
 /*~~~~~~~~~~~~~~~~~~~~~~ Audio Loop ~~~~~~~~~~~~~~~~~~~~~~~*/
 
 void Loop2(void * pvParameters) {
-  bool gameOverSoundPlayed = false;
+  bool gameOverSoundPlaying = false;
   bool coinSoundPlaying = false;
   unsigned long coinSoundStartTime = 0;
   const unsigned long coinSoundDuration = 1000; // Duración estimada del sonido de moneda en milisegundos
@@ -612,15 +611,15 @@ void Loop2(void * pvParameters) {
       if (!audio.isRunning() && !coinSoundPlaying) {
         Serial.println(F("Core 0: Iniciando reproducción de melodía de gameplay..."));
         audio.connecttoFS(SD, "/gameplay.mp3");
-        gameOverSoundPlayed = false;
+        gameOverSoundPlaying = false;
       }
     }
     else if (isGameOver) {
-      if (!gameOverSoundPlayed) {
+      if (!gameOverSoundPlaying) {
         audio.stopSong();
         Serial.println(F("Core 0: Iniciando reproducción de melodía de game over..."));
         audio.connecttoFS(SD, "/gameover.mp3");
-        gameOverSoundPlayed = true;
+        gameOverSoundPlaying = true;
       }
     }
     else if (isIntro) {
@@ -680,7 +679,7 @@ void setup ( void ) {
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
   
   // Set Volume
-  audio.setVolume(5);
+  audio.setVolume(21);
 
   initializeScores();
   loadScores();
@@ -688,7 +687,7 @@ void setup ( void ) {
   /* Pasar los loops como punteros a función */
   DCESP32.ConfigCores(Loop1, Loop2); 
 
-  Serial.println(F( "Se han configurado correctamente los dos nucleos "));
+  Serial.println(F("Se han configurado correctamente los dos nucleos "));
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~ Intro ~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -715,7 +714,7 @@ void showIntro() {
   lcd.clear();
 
   // Mostrar los nombres de los creadores de dos en dos
-  String nombres[] = {"Daniel Astilla", "Alejandro Barajas","Javier Gonzalez", "Daniel Ramirez", "Bruno Sanchez"};
+  String nombres[] = {"Daniel Astilla", "Alejandro Barajas","Javier Gonzalez", "Daniel Ramirez", "Bruno Sanchez, Beyonce"};
   int numNombres = 5;
   
   for (int i = 0; i < numNombres; i += 2) {
