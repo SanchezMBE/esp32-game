@@ -714,7 +714,7 @@ void showIntro() {
   lcd.clear();
 
   // Mostrar los nombres de los creadores de dos en dos
-  String nombres[] = {"Daniel Astilla", "Alejandro Barajas","Javier Gonzalez", "Daniel Ramirez", "Bruno Sanchez, Beyonce"};
+  String nombres[] = {"Daniel Astilla", "Alejandro Barajas","Javier Gonzalez", "Daniel Ramirez", "Bruno Sanchez"};
   int numNombres = 5;
   
   for (int i = 0; i < numNombres; i += 2) {
